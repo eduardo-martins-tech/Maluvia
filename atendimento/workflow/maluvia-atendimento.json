@@ -1,0 +1,625 @@
+{
+  "name": "Malúvia — Atendimento com IA",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Atendimento Malúvia com IA + Chatwoot\nWhatsApp chega pelo Chatwoot (bot de agente); o formulário, pelo próprio n8n.\n\n1. Credenciais: Header Auth `x-api-key` (IA), Header Auth `api_access_token` (token do bot do Chatwoot) e SMTP.\n2. Ative o fluxo. No bot do Chatwoot, use a URL de produção do webhook **Chatwoot: nova mensagem**.\n3. Configurações: variáveis MALUVIA_* do infra/.env.\n\nNão edite os nós de código aqui: o original está em atendimento/src/ no GitHub.",
+        "height": 280,
+        "width": 480
+      },
+      "id": "cb271534-6a66-58d3-9010-2b80469c970a",
+      "name": "Leia-me",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maluvia-chatwoot",
+        "options": {}
+      },
+      "id": "c753179d-4aa5-56a9-ad11-9438488402b3",
+      "name": "Chatwoot: nova mensagem",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "484fd3f0-63bd-5573-a94a-c4f27ad7140b"
+    },
+    {
+      "parameters": {
+        "formTitle": "Fale com a Malúvia",
+        "formDescription": "Mande sua dúvida, pedido de troca ou sugestão. Respondemos por e-mail.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Nome",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "E-mail",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "WhatsApp (opcional)",
+              "placeholder": "(11) 99999-9999"
+            },
+            {
+              "fieldLabel": "Número do pedido (opcional)",
+              "placeholder": "MLV-0000"
+            },
+            {
+              "fieldLabel": "Assunto",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Dúvida sobre produto"
+                  },
+                  {
+                    "option": "Tamanho"
+                  },
+                  {
+                    "option": "Pagamento"
+                  },
+                  {
+                    "option": "Entrega e frete"
+                  },
+                  {
+                    "option": "Meu pedido"
+                  },
+                  {
+                    "option": "Troca ou devolução"
+                  },
+                  {
+                    "option": "Reclamação"
+                  },
+                  {
+                    "option": "Outro"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Mensagem",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {
+          "formSubmittedText": "Recebemos sua mensagem! A resposta chega no seu e-mail em instantes."
+        }
+      },
+      "id": "f2dd5e45-320e-5fe3-8485-f882ed5d30d5",
+      "name": "Formulário Fale Conosco",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        260
+      ],
+      "webhookId": "450a1a45-b212-5bba-9da7-ee021034b6bb"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recebe o evento do Chatwoot (bot de agente) e converte no formato único.\n// Só responde mensagens da cliente em conversas com status \"pending\" (com o bot).\n// Conversas \"open\" estão com a equipe: a IA fica quieta e o Chatwoot avisa a atendente.\nconst b = $json.body ?? $json;\nconst tipo = b.message_type;\nconst conversa = b.conversation ?? {};\nif (b.event !== 'message_created') return [];\nif (!(tipo === 'incoming' || tipo === 0) || b.private) return [];\nif (conversa.status && conversa.status !== 'pending') return [];\n\nconst remetente = b.sender ?? conversa.meta?.sender ?? {};\nlet texto = (b.content || '').trim();\nif (!texto && (b.attachments || []).length) {\n  const t = b.attachments[0].file_type;\n  texto = t === 'image' ? '[A cliente enviou uma imagem]' : t === 'audio' ? '[A cliente enviou um áudio]' : '[A cliente enviou um arquivo]';\n}\nif (!texto) return [];\n\nreturn [{ json: {\n  canal: 'whatsapp',\n  id_conversa: 'cw:' + conversa.id,\n  telefone: (remetente.phone_number || '').replace(/\\D/g, '') || null,\n  email: remetente.email || null,\n  nome: remetente.name || null,\n  texto,\n  recebida_em: b.created_at ? new Date(b.created_at).toISOString() : new Date().toISOString(),\n  chatwoot: { account_id: b.account?.id, conversation_id: conversa.id, inbox_id: b.inbox?.id },\n}}];\n"
+      },
+      "id": "36344c3a-c649-588e-8351-459262d4f74b",
+      "name": "Normalizar Chatwoot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Converte o envio do formulário Fale Conosco no mesmo formato do WhatsApp.\nconst j = $input.first().json;\nconst pedido = (j['Número do pedido (opcional)'] || '').trim();\nconst texto = [\n  j['Assunto'] ? `Assunto: ${j['Assunto']}` : '',\n  pedido ? `Pedido: ${pedido}` : '',\n  (j['Mensagem'] || '').trim(),\n].filter(Boolean).join('\\n');\nconst email = (j['E-mail'] || '').trim().toLowerCase();\nreturn [{ json: {\n  canal: 'formulario',\n  id_conversa: 'form:' + email + ':' + Date.now(),\n  telefone: (j['WhatsApp (opcional)'] || '').replace(/\\D/g, '') || null,\n  email,\n  nome: (j['Nome'] || '').trim() || null,\n  texto,\n  recebida_em: j.submittedAt || new Date().toISOString(),\n}}];\n"
+      },
+      "id": "252fec44-4153-54a5-a1c2-d3c0ecf1689c",
+      "name": "Normalizar formulário",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f409ffda-55a5-5f4b-8fc2-b21e46dd0889",
+              "name": "base_conhecimento",
+              "type": "string",
+              "value": "# Base de conhecimento — Malúvia (MODELO)\n\n> Conteúdo fictício para desenvolvimento e demonstração. Tudo marcado com [CONFIRMAR] deve ser trocado pelas regras reais da loja antes de entrar em produção. Depois de editar, rode `python atendimento/scripts/montar_workflow.py` para atualizar o fluxo.\n\n## Sobre a loja\n- A Malúvia é uma loja virtual de roupas e vende pelo site. [CONFIRMAR]\n- Atendimento da equipe: segunda a sexta, das 9h às 18h. Fora desse horário, a assistente virtual responde e a equipe retorna no próximo dia útil. [CONFIRMAR]\n\n## Tamanhos e medidas\nTamanhos disponíveis: P, M, G e GG.\n\n| Tamanho | Busto (cm) | Cintura (cm) | Quadril (cm) |\n|---|---|---|---|\n| P  | 84 a 88   | 66 a 70 | 92 a 96   |\n| M  | 89 a 94   | 71 a 76 | 97 a 102  |\n| G  | 95 a 100  | 77 a 82 | 103 a 108 |\n| GG | 101 a 107 | 83 a 89 | 109 a 115 |\n\n- Se a medida ficar entre dois tamanhos: sugerir o maior para peças justas e o menor para peças amplas ou oversized.\n- Cada peça pode ter modelagem própria. A página do produto traz as medidas da peça. [CONFIRMAR]\n- Como medir: busto na parte mais cheia, cintura na parte mais fina, quadril na parte mais larga, com a fita sem apertar.\n\n## Pagamento\n- Pix com 5% de desconto, cartão de crédito em até 3x sem juros (parcela mínima de R$ 50) ou boleto. [CONFIRMAR]\n- Pix e boleto: o pedido é confirmado após a compensação (Pix na hora, boleto em até 2 dias úteis). Cartão: em até 1 dia útil.\n- O Pix gerado vale por 24 horas. Depois disso, é preciso fazer um novo pedido.\n\n## Envio e frete\n- O pedido é postado em até 2 dias úteis após a confirmação do pagamento. [CONFIRMAR]\n- Envio pelos Correios (PAC ou SEDEX). O prazo de entrega aparece no carrinho ao informar o CEP.\n- Frete grátis em compras acima de R$ 299 para todo o Brasil. [CONFIRMAR]\n- O código de rastreio é enviado por e-mail quando o pedido é postado.\n\n## Trocas\n- A primeira troca é gratuita, em até 30 dias após o recebimento. [CONFIRMAR]\n- A peça precisa estar sem uso, sem lavagem e com a etiqueta.\n- Pode trocar por outro tamanho, outra cor ou outra peça. Se a nova peça custar mais, a cliente paga a diferença.\n- Para pedir a troca: informar o número do pedido, a peça e o motivo. A equipe envia o código de postagem reversa.\n\n## Devolução (arrependimento)\n- Compras pela internet podem ser devolvidas em até 7 dias corridos após o recebimento, sem precisar justificar (direito de arrependimento, art. 49 do Código de Defesa do Consumidor).\n- Pedidos de devolução e de reembolso são sempre conduzidos pela equipe.\n\n## Produto com defeito\n- Peças com defeito são trocadas ou reembolsadas sem custo para a cliente.\n- A cliente deve enviar fotos do defeito e o número do pedido. A equipe assume o atendimento.\n\n## Cuidados com as peças\n- Seguir sempre a etiqueta. Em geral: lavar do avesso, em água fria, sem alvejante e secar à sombra.\n\n## Cupons e promoções\n- Cupons ativos são divulgados no site e nas redes sociais da loja. A assistente não cria nem promete cupons. [CONFIRMAR]\n\n## Canais de contato\n- WhatsApp da loja e formulário Fale Conosco do site. [CONFIRMAR]\n"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "26579124-13e1-58ae-b4ac-82ee14403923",
+      "name": "Base de conhecimento",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        130
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================= CONFIGURAÇÕES =================\n// Valores vêm das variáveis MALUVIA_* do infra/.env; o segundo valor é o padrão.\nconst env = (nome, padrao) => { try { return $env[nome] || padrao; } catch (e) { return padrao; } };\nconst CONFIG = {\n  modelo_ia: env('MALUVIA_MODELO_IA', 'claude-haiku-5-5'),\n  chatwoot_url: env('MALUVIA_CHATWOOT_URL', 'http://rails:3000'),   // endereço do Chatwoot visto pelo n8n\n  email_remetente: env('MALUVIA_EMAIL_REMETENTE', 'atendimento@exemplo.com'),\n  email_equipe: env('MALUVIA_EMAIL_EQUIPE', 'equipe@exemplo.com'),\n  max_historico: 10,          // mensagens guardadas por conversa\n  limite_tentativas: 2,       // respostas sem resolver antes de transferir\n};\n\n// ============ PEDIDOS FICTÍCIOS (depois virão do ERP/site) ============\nconst PEDIDOS = {\n  'MLV-1001': { cliente: 'Ana Souza', status: 'Pagamento confirmado, aguardando postagem', itens: 'Vestido midi de linho (M)', valor: 'R$ 289,90', rastreio: null, previsao: 'Postagem em até 2 dias úteis' },\n  'MLV-1002': { cliente: 'Beatriz Lima', status: 'Enviado pelos Correios (PAC)', itens: 'Calça pantalona (G), Blusa de tricô (G)', valor: 'R$ 349,80', rastreio: 'QB123456789BR', previsao: 'Entrega prevista em 3 dias úteis' },\n  'MLV-1003': { cliente: 'Carla Mendes', status: 'Entregue em 15/10/2026', itens: 'Saia plissada (P)', valor: 'R$ 159,90', rastreio: 'QB987654321BR', previsao: null },\n  'MLV-1004': { cliente: 'Daniela Rocha', status: 'Aguardando pagamento (boleto)', itens: 'Macacão alfaiataria (M)', valor: 'R$ 399,90', rastreio: null, previsao: 'Boleto vence em 2 dias' },\n  'MLV-1005': { cliente: 'Elisa Prado', status: 'Enviado, entrega atrasada (previsão era 18/10/2026)', itens: 'Jaqueta jeans (GG)', valor: 'R$ 279,90', rastreio: 'QB555666777BR', previsao: 'Atrasada' },\n};\n\nconst msg = { ...$json };\nconst base = msg.base_conhecimento || '';\ndelete msg.base_conhecimento;\n\n// Memória das conversas (só é salva com o fluxo ATIVO, não em testes manuais)\nconst dados = $getWorkflowStaticData('global');\ndados.conversas = dados.conversas || {};\nconst conv = dados.conversas[msg.id_conversa] || { historico: [], com_atendente: false, tentativas_sem_resolver: 0, criada_em: msg.recebida_em };\ndados.conversas[msg.id_conversa] = conv;\n\n// Quem decide se a IA responde é o status da conversa no Chatwoot.\n// Se a conversa voltou para o bot depois de passar pela equipe, recomeça o histórico.\nif (conv.com_atendente) { conv.com_atendente = false; conv.historico = []; conv.tentativas_sem_resolver = 0; }\n\nconv.historico.push({ role: 'user', content: msg.texto || '(mensagem vazia)' });\nconv.historico = conv.historico.slice(-CONFIG.max_historico);\n\n// Pedido citado na mensagem (ou o último citado na conversa)\nconst achado = (msg.texto || '').match(/MLV[\\s-]?(\\d{4})/i);\nconst numero = achado ? `MLV-${achado[1]}` : (conv.ultimo_pedido || null);\nlet pedido = null;\nif (numero) {\n  pedido = PEDIDOS[numero] ? { numero, ...PEDIDOS[numero] } : { numero, nao_encontrado: true };\n  if (PEDIDOS[numero]) conv.ultimo_pedido = numero;\n}\nconst pedidoTexto = !pedido\n  ? 'Nenhum número de pedido informado.'\n  : pedido.nao_encontrado\n    ? `A cliente citou o pedido ${pedido.numero}, mas ele não foi encontrado. Peça para conferir o número; se insistir, transfira.`\n    : Object.entries(pedido).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('\\n');\n\n// Palavras que levam direto para a equipe, mesmo que a IA não perceba\nconst GATILHOS = /(atendente|humano|pessoa de verdade|falar com algu[eé]m|reclama|procon|reclame aqui|defeito|estorno|reembolso|devolver o dinheiro|cancelar|golpe|absurdo|p[eé]ssimo|horr[ií]vel)/i;\nconst gatilho = GATILHOS.test(msg.texto || '');\n\nconst agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });\nconst ehWhats = msg.canal === 'whatsapp';\n\nconst system = `Você é a Malu, a assistente virtual da Malúvia, uma loja virtual de roupas. Você atende clientes pelo ${ehWhats ? 'WhatsApp' : 'formulário Fale Conosco do site (sua resposta será enviada por e-mail)'}.\n\nREGRAS\n- Responda somente com base na BASE DE CONHECIMENTO e nos DADOS DO PEDIDO abaixo. Se a resposta não estiver ali, não invente: diga que vai encaminhar para a equipe e marque \"transferir\": true.\n- Nunca prometa reembolso, desconto, cupom, brinde ou prazo que não esteja na base.\n- Reclamação, produto com defeito, cancelamento, pedido de reembolso ou estorno, entrega atrasada ou cliente irritada: acolha em uma frase, diga que a equipe vai assumir e marque \"transferir\": true.\n- Se a cliente pedir para falar com uma pessoa, transfira.\n- Dúvida sobre um pedido sem o número: peça o número no formato MLV-0000.\n- Nunca peça senha, número de cartão ou CPF completo.\n- ${conv.historico.length === 1 ? 'Esta é a primeira mensagem da conversa: apresente-se como Malu, a assistente virtual da Malúvia.' : 'A conversa já começou: não se apresente de novo.'}\n- Tom: simpático e direto, em português do Brasil. ${ehWhats ? 'No WhatsApp, seja breve: até 3 frases curtas ou uma lista pequena. Para negrito use *uma estrela*, nunca **duas**. No máximo um emoji.' : 'No e-mail, comece com \"Olá, ' + (msg.nome || 'tudo bem') + '!\" e termine com \"Equipe Malúvia\".'}\n\nBASE DE CONHECIMENTO\n${base}\n\nDADOS DO PEDIDO\n${pedidoTexto}\n\nAGORA: ${agora}\n\nFORMATO DA RESPOSTA\nResponda APENAS com um objeto JSON válido, sem nada antes ou depois:\n{\"categoria\": \"produto|tamanho|pagamento|envio_frete|status_pedido|troca|devolucao|defeito|reclamacao|outro\", \"resposta\": \"texto para a cliente\", \"transferir\": true ou false, \"motivo_transferencia\": \"texto curto, ou vazio\", \"resolvido\": true ou false}`;\n\n// A API exige mensagens alternadas começando pela cliente\nconst mensagens = [];\nfor (const h of conv.historico) {\n  const ultima = mensagens[mensagens.length - 1];\n  if (ultima && ultima.role === h.role) ultima.content += '\\n' + h.content;\n  else mensagens.push({ role: h.role, content: h.content });\n}\nwhile (mensagens.length && mensagens[0].role !== 'user') mensagens.shift();\n\nreturn [{ json: {\n  ...msg,\n  config: CONFIG,\n  pedido,\n  gatilho_transferencia: gatilho,\n  requisicao_ia: { model: CONFIG.modelo_ia, max_tokens: 700, system, messages: mensagens },\n}}];\n"
+      },
+      "id": "d5bb371d-1e4f-57be-bd20-1e32c4041211",
+      "name": "Montar contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        130
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requisicao_ia) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a2db49b8-8433-51c8-a34f-6684a5ffb586",
+      "name": "IA (Claude)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        130
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lê a resposta da IA, aplica as regras de transferência e registra o atendimento.\nconst ctx = $('Montar contexto').first().json;\nconst CONFIG = ctx.config;\nconst bruto = $json.content?.[0]?.text ?? '';\n\nlet r;\ntry {\n  r = JSON.parse(bruto.slice(bruto.indexOf('{'), bruto.lastIndexOf('}') + 1));\n  if (!r.resposta) throw new Error('sem resposta');\n} catch (e) {\n  r = { categoria: 'outro', resposta: 'Desculpe, tive um problema para responder agora. Vou passar sua mensagem para a nossa equipe, que retorna em breve.', transferir: true, motivo_transferencia: 'Falha ao ler a resposta da IA', resolvido: false };\n}\n\nconst dados = $getWorkflowStaticData('global');\ndados.conversas = dados.conversas || {};\nconst conv = dados.conversas[ctx.id_conversa] || { historico: [], tentativas_sem_resolver: 0 };\ndados.conversas[ctx.id_conversa] = conv;\n\nlet transferir = r.transferir === true;\nlet motivo = r.motivo_transferencia || '';\nlet resposta = String(r.resposta).trim();\n\nif (r.resolvido === true) conv.tentativas_sem_resolver = 0;\nelse if (!transferir) conv.tentativas_sem_resolver = (conv.tentativas_sem_resolver || 0) + 1;\n\nif (!transferir && ctx.gatilho_transferencia) { transferir = true; motivo = 'Palavra-chave de transferência na mensagem'; }\nif (!transferir && conv.tentativas_sem_resolver >= CONFIG.limite_tentativas) { transferir = true; motivo = `${CONFIG.limite_tentativas} respostas sem resolver`; }\nif (transferir && r.transferir !== true) {\n  resposta += ctx.canal === 'whatsapp'\n    ? '\\n\\nVou passar sua conversa para a nossa equipe, que continua o atendimento por aqui. 😊'\n    : '\\n\\nEncaminhei sua mensagem para a nossa equipe, que vai responder em breve.';\n}\n\nconv.historico.push({ role: 'assistant', content: resposta });\nconv.historico = conv.historico.slice(-CONFIG.max_historico);\nif (transferir) { conv.com_atendente = true; conv.transferida_em = new Date().toISOString(); conv.tentativas_sem_resolver = 0; }\n\n// Registro para acompanhar resultados (últimos 1000 atendimentos)\ndados.registro = dados.registro || [];\ndados.registro.push({\n  quando: new Date().toISOString(), canal: ctx.canal, conversa: ctx.id_conversa, nome: ctx.nome,\n  categoria: r.categoria || 'outro', transferido: transferir, motivo: motivo || null,\n  pedido: ctx.pedido?.numero || null, mensagem: ctx.texto, resposta,\n});\ndados.registro = dados.registro.slice(-1000);\n\nconst contato = ctx.telefone ? '+' + ctx.telefone : ctx.email;\nconst aviso = transferir\n  ? `🔔 Atendimento transferido pela IA\\nCliente: ${ctx.nome || 'sem nome'} (${contato})\\nCanal: ${ctx.canal}\\nAssunto: ${r.categoria || 'outro'}\\nMotivo: ${motivo || 'pedido da IA'}\\nPedido: ${ctx.pedido?.numero || '-'}\\nMensagem: \"${ctx.texto}\"`\n  : null;\n\nreturn [{ json: {\n  canal: ctx.canal, telefone: ctx.telefone, email: ctx.email, nome: ctx.nome,\n  categoria: r.categoria || 'outro', resposta, transferir, motivo, aviso_atendente: aviso,\n  config: CONFIG, chatwoot: ctx.chatwoot || null,\n}}];\n"
+      },
+      "id": "770b3dc6-5bd7-5429-b3d4-67615c0727f9",
+      "name": "Aplicar regras e registrar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        130
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c90c44a1-ac58-5f30-a47e-c7e390753db2",
+              "leftValue": "={{ $json.chatwoot }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6c14f323-22f8-52e6-bc53-012a18ab1ea8",
+      "name": "Veio do Chatwoot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.config.chatwoot_url }}/api/v1/accounts/{{ $json.chatwoot.account_id }}/conversations/{{ $json.chatwoot.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: $json.resposta, message_type: 'outgoing', private: false }) }}",
+        "options": {}
+      },
+      "id": "737967e0-80f0-59ef-b3be-e310e6988996",
+      "name": "Responder no Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        -80
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.config.email_remetente }}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Malúvia: resposta ao seu contato",
+        "emailFormat": "text",
+        "text": "={{ $json.resposta }}",
+        "options": {}
+      },
+      "id": "82fc8508-b8b5-57cf-8828-8ccc6eae03e6",
+      "name": "Responder por e-mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1680,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "717b335e-e5ec-5d2f-85de-7d3d3cc2d0a9",
+              "leftValue": "={{ $json.transferir }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0ace0aa2-5996-5e0b-8532-57938663fa89",
+      "name": "Transferir para a equipe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "730c664b-c855-50bb-896b-7a16a3962365",
+              "leftValue": "={{ $json.chatwoot }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4c44129d-4239-5791-b2f3-8cbff7f94829",
+      "name": "Transferência no Chatwoot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.config.chatwoot_url }}/api/v1/accounts/{{ $json.chatwoot.account_id }}/conversations/{{ $json.chatwoot.conversation_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: $json.aviso_atendente, message_type: 'outgoing', private: true }) }}",
+        "options": {}
+      },
+      "id": "d5cf25fb-b5c2-5440-b326-88f68774429a",
+      "name": "Nota interna para a equipe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Transferência no Chatwoot?').item.json.config.chatwoot_url }}/api/v1/accounts/{{ $('Transferência no Chatwoot?').item.json.chatwoot.account_id }}/conversations/{{ $('Transferência no Chatwoot?').item.json.chatwoot.conversation_id }}/toggle_status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'open' }) }}",
+        "options": {}
+      },
+      "id": "d2cd81d8-c434-569e-86d7-9974609e2768",
+      "name": "Passar conversa para a equipe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.config.email_remetente }}",
+        "toEmail": "={{ $json.config.email_equipe }}",
+        "subject": "=Atendimento transferido: {{ $json.nome || $json.email }}",
+        "emailFormat": "text",
+        "text": "={{ $json.aviso_atendente }}\n\nResponder para: {{ $json.email }}",
+        "options": {}
+      },
+      "id": "4d585400-049c-548d-b44e-89da543921ef",
+      "name": "Avisar equipe por e-mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1920,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "path": "maluvia-relatorio",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "32c4918d-cc69-50e8-9573-434355432c18",
+      "name": "Relatório (link)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        600
+      ],
+      "webhookId": "b2eaae5c-11b2-5b06-9c48-b7adb886f1d4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resumo dos atendimentos. Acesse a URL do webhook com ?chave=MALUVIA_CHAVE_RELATORIO\nlet CHAVE = '';\ntry { CHAVE = $env.MALUVIA_CHAVE_RELATORIO || ''; } catch (e) {}\nif (!CHAVE) return [{ json: { erro: 'Defina MALUVIA_CHAVE_RELATORIO no infra/.env' } }];\nif (($json.query?.chave || '') !== CHAVE) return [{ json: { erro: 'Chave inválida' } }];\n\nconst reg = $getWorkflowStaticData('global').registro || [];\nconst respondidas = reg.filter(r => r.categoria !== 'com_atendente');\nconst resolvidasIA = respondidas.filter(r => !r.transferido).length;\nconst porCategoria = {};\nfor (const r of respondidas) porCategoria[r.categoria] = (porCategoria[r.categoria] || 0) + 1;\nconst porMotivo = {};\nfor (const r of respondidas.filter(r => r.transferido)) porMotivo[r.motivo || 'pedido da IA'] = (porMotivo[r.motivo || 'pedido da IA'] || 0) + 1;\n\nreturn [{ json: {\n  total_mensagens: reg.length,\n  respondidas_pela_ia: respondidas.length,\n  resolvidas_sem_equipe: resolvidasIA,\n  taxa_resolucao_ia: respondidas.length ? Math.round(100 * resolvidasIA / respondidas.length) + '%' : '-',\n  por_categoria: porCategoria,\n  motivos_de_transferencia: porMotivo,\n  ultimas_20: reg.slice(-20).reverse(),\n} }];\n"
+      },
+      "id": "7711191e-1e8b-5e2f-be25-646d7cbd0b6e",
+      "name": "Montar relatório",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Chatwoot: nova mensagem": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formulário Fale Conosco": {
+      "main": [
+        [
+          {
+            "node": "Normalizar formulário",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Base de conhecimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar formulário": {
+      "main": [
+        [
+          {
+            "node": "Base de conhecimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Base de conhecimento": {
+      "main": [
+        [
+          {
+            "node": "Montar contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar contexto": {
+      "main": [
+        [
+          {
+            "node": "IA (Claude)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA (Claude)": {
+      "main": [
+        [
+          {
+            "node": "Aplicar regras e registrar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aplicar regras e registrar": {
+      "main": [
+        [
+          {
+            "node": "Veio do Chatwoot?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Transferir para a equipe?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veio do Chatwoot?": {
+      "main": [
+        [
+          {
+            "node": "Responder no Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder por e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transferir para a equipe?": {
+      "main": [
+        [
+          {
+            "node": "Transferência no Chatwoot?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Transferência no Chatwoot?": {
+      "main": [
+        [
+          {
+            "node": "Nota interna para a equipe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar equipe por e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nota interna para a equipe": {
+      "main": [
+        [
+          {
+            "node": "Passar conversa para a equipe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relatório (link)": {
+      "main": [
+        [
+          {
+            "node": "Montar relatório",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo"
+  },
+  "pinData": {},
+  "active": false
+}

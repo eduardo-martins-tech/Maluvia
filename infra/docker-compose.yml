@@ -1,0 +1,123 @@
+# Malúvia — atendimento com IA
+# Sobe n8n + Chatwoot (com Postgres e Redis) numa única máquina.
+# Uso: veja docs/setup-local.md
+
+name: maluvia
+
+x-chatwoot: &chatwoot
+  image: chatwoot/chatwoot:v4.18.0
+  env_file: .env
+  volumes:
+    - chatwoot_storage:/app/storage
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+  restart: unless-stopped
+
+services:
+  postgres:
+    # Chatwoot precisa da extensão pgvector
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: chatwoot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro   # cria o banco do n8n
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", "redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  rails:
+    <<: *chatwoot
+    entrypoint: docker/entrypoints/rails.sh
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  sidekiq:
+    <<: *chatwoot
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+
+  n8n:
+    image: n8nio/n8n:latest
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: postgres
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_HOST: ${N8N_HOST}
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      WEBHOOK_URL: ${N8N_PUBLIC_URL}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE}
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      TZ: America/Sao_Paulo
+      # Os nós de código leem as variáveis MALUVIA_*
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      MALUVIA_CHATWOOT_URL: http://rails:3000
+      MALUVIA_MODELO_IA: ${MALUVIA_MODELO_IA}
+      MALUVIA_EMAIL_REMETENTE: ${MALUVIA_EMAIL_REMETENTE}
+      MALUVIA_EMAIL_EQUIPE: ${MALUVIA_EMAIL_EQUIPE}
+      MALUVIA_CHAVE_RELATORIO: ${MALUVIA_CHAVE_RELATORIO}
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Túnel público para a Meta alcançar o Chatwoot no seu computador.
+  # Só sobe com: docker compose --profile tunel up -d
+  ngrok:
+    image: ngrok/ngrok:latest
+    profiles: ["tunel"]
+    command: ["http", "--url=${NGROK_DOMAIN}", "rails:3000"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    depends_on:
+      - rails
+    restart: unless-stopped
+
+  # Proxy com HTTPS automático para a VPS.
+  # Só sobe com: docker compose --profile producao up -d
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["producao"]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CHATWOOT_DOMAIN: ${CHATWOOT_DOMAIN}
+      N8N_DOMAIN: ${N8N_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - rails
+      - n8n
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  postgres_data:
+  redis_data:
+  chatwoot_storage:
+  n8n_data:

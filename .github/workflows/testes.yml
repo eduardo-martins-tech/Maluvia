@@ -1,0 +1,25 @@
+name: Testes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  atendimento:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Gerar o fluxo a partir de src/
+        run: python atendimento/scripts/montar_workflow.py
+      - name: Conferir se o fluxo commitado está atualizado
+        run: git diff --exit-code atendimento/workflow/
+      - name: Simular conversas
+        run: node atendimento/testes/simular.js
+      - name: Validar o docker-compose
+        run: cp infra/.env.example infra/.env && docker compose -f infra/docker-compose.yml config --quiet

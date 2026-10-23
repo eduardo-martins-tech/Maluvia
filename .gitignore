@@ -1,0 +1,15 @@
+# Segredos
+.env
+*.env
+!.env.example
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node e Python
+node_modules/
+__pycache__/
+*.pyc
