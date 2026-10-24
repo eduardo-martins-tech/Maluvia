@@ -4,6 +4,11 @@ Mudanças relevantes de cada versão. Formato baseado em [Keep a Changelog](http
 
 ## [Não lançado]
 
+### Alterado
+- Nome da loja padronizado como Maluvia, sem acento.
+- A Malu passa a atender como loja de moda feminina com roupas e semijoias: base de conhecimento com garantia, cuidados e medidas de semijoias.
+- Alergia, irritação na pele e banho descascando ou escurecendo transferem direto para a equipe.
+
 ## [0.1.0] - 2026-10-23
 
 ### Adicionado

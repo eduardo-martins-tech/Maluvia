@@ -1,10 +1,10 @@
-# Malúvia
+# Maluvia
 
 [![Testes](https://github.com/eduardo-martins-tech/maluvia/actions/workflows/testes.yml/badge.svg)](https://github.com/eduardo-martins-tech/maluvia/actions/workflows/testes.yml)
 ![Versão](https://img.shields.io/badge/vers%C3%A3o-0.1.0-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
-Sistema de uma loja virtual de roupas, construído por módulos sobre a mesma infraestrutura e o mesmo banco de dados.
+Sistema de uma loja virtual de moda feminina (roupas e semijoias), construído por módulos sobre a mesma infraestrutura e o mesmo banco de dados.
 
 | Módulo | Status |
 |---|---|
@@ -51,7 +51,7 @@ Detalhes em [docs/arquitetura.md](docs/arquitetura.md).
 - **Estado da conversa no Chatwoot:** a IA atua como bot de agente. Conversa *Pendente* é da IA; *Aberta*, da equipe. Não há regra de tempo nem flag duplicada para sincronizar.
 - **Resposta estruturada:** a IA devolve JSON (`categoria`, `resposta`, `transferir`, `resolvido`), o que permite aplicar regras em código e gerar indicadores.
 - **Rede de segurança determinística:** palavras-chave e um limite de tentativas forçam a transferência, independentemente do julgamento da IA.
-- **Código do fluxo versionado e testado:** o JavaScript dos nós fica em `atendimento/src/`, um script gera o fluxo importável e um simulador roda 12 cenários de conversa. O GitHub Actions confere tudo a cada push.
+- **Código do fluxo versionado e testado:** o JavaScript dos nós fica em `atendimento/src/`, um script gera o fluxo importável e um simulador roda 13 cenários de conversa. O GitHub Actions confere tudo a cada push.
 - **Infraestrutura em um comando:** Docker Compose com n8n, Chatwoot, Postgres e Redis, com túnel para desenvolver no computador e HTTPS automático na VPS.
 - **Custo de operação de cerca de R$ 100 por mês** ([docs/custos.md](docs/custos.md)).
 

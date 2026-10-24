@@ -76,6 +76,13 @@ teste('palavra-chave transfere mesmo se a IA não transferir', async () => {
   assert.match(r.aviso_atendente, /Atendimento transferido/);
 });
 
+teste('reação alérgica a semijoia transfere para a equipe', async () => {
+  memoria = {};
+  const [, r] = await mensagem('O brinco deu alergia na minha orelha',
+    { categoria: 'produto', resposta: 'Que pena!', transferir: false, resolvido: false });
+  assert.equal(r.transferir, true);
+});
+
 teste('conversa que volta para o bot recomeça o histórico', async () => {
   const [ctx] = await mensagem('Oi de novo',
     { categoria: 'outro', resposta: 'Olá!', transferir: false, resolvido: true });

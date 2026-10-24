@@ -61,7 +61,7 @@ def email(nome, para, assunto, texto, pos):
 ASSUNTOS = ["Dúvida sobre produto", "Tamanho", "Pagamento", "Entrega e frete", "Meu pedido",
             "Troca ou devolução", "Reclamação", "Outro"]
 
-LEIA_ME = """## Atendimento Malúvia com IA + Chatwoot
+LEIA_ME = """## Atendimento Maluvia com IA + Chatwoot
 WhatsApp chega pelo Chatwoot (bot de agente); o formulário, pelo próprio n8n.
 
 1. Credenciais: Header Auth `x-api-key` (IA), Header Auth `api_access_token` (token do bot do Chatwoot) e SMTP.
@@ -77,7 +77,7 @@ nos = [
      "name": "Chatwoot: nova mensagem", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 0],
      "webhookId": nid("webhook/chatwoot")},
     {"parameters": {
-        "formTitle": "Fale com a Malúvia",
+        "formTitle": "Fale com a Maluvia",
         "formDescription": "Mande sua dúvida, pedido de troca ou sugestão. Respondemos por e-mail.",
         "formFields": {"values": [
             {"fieldLabel": "Nome", "requiredField": True},
@@ -112,7 +112,7 @@ nos = [
     se("Veio do Chatwoot?", "={{ $json.chatwoot }}", "existe", [1440, 0]),
     chatwoot("Responder no Chatwoot", "$json", "/messages",
              "={{ JSON.stringify({ content: $json.resposta, message_type: 'outgoing', private: false }) }}", [1680, -80]),
-    email("Responder por e-mail", "={{ $json.email }}", "Malúvia: resposta ao seu contato",
+    email("Responder por e-mail", "={{ $json.email }}", "Maluvia: resposta ao seu contato",
           "={{ $json.resposta }}", [1680, 80]),
     se("Transferir para a equipe?", "={{ $json.transferir }}", "verdadeiro", [1440, 300]),
     se("Transferência no Chatwoot?", "={{ $json.chatwoot }}", "existe", [1680, 300]),
@@ -159,7 +159,7 @@ for origem, c in conexoes.items():
         for destino in saida:
             assert destino["node"] in nomes, destino["node"]
 
-fluxo = {"name": "Malúvia — Atendimento com IA", "nodes": nos, "connections": conexoes,
+fluxo = {"name": "Maluvia — Atendimento com IA", "nodes": nos, "connections": conexoes,
          "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo"}, "pinData": {}, "active": False}
 SAIDA.parent.mkdir(exist_ok=True)
 SAIDA.write_text(json.dumps(fluxo, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

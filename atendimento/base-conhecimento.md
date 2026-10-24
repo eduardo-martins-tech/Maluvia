@@ -1,12 +1,12 @@
-# Base de conhecimento — Malúvia (MODELO)
+# Base de conhecimento — Maluvia (MODELO)
 
 > Conteúdo fictício para desenvolvimento e demonstração. Tudo marcado com [CONFIRMAR] deve ser trocado pelas regras reais da loja antes de entrar em produção. Depois de editar, rode `python atendimento/scripts/montar_workflow.py` para atualizar o fluxo.
 
 ## Sobre a loja
-- A Malúvia é uma loja virtual de roupas e vende pelo site. [CONFIRMAR]
+- A Maluvia é uma loja virtual de moda feminina: vende roupas e semijoias pelo site. [CONFIRMAR]
 - Atendimento da equipe: segunda a sexta, das 9h às 18h. Fora desse horário, a assistente virtual responde e a equipe retorna no próximo dia útil. [CONFIRMAR]
 
-## Tamanhos e medidas
+## Roupas: tamanhos e medidas
 Tamanhos disponíveis: P, M, G e GG.
 
 | Tamanho | Busto (cm) | Cintura (cm) | Quadril (cm) |
@@ -19,6 +19,15 @@ Tamanhos disponíveis: P, M, G e GG.
 - Se a medida ficar entre dois tamanhos: sugerir o maior para peças justas e o menor para peças amplas ou oversized.
 - Cada peça pode ter modelagem própria. A página do produto traz as medidas da peça. [CONFIRMAR]
 - Como medir: busto na parte mais cheia, cintura na parte mais fina, quadril na parte mais larga, com a fita sem apertar.
+
+## Semijoias
+- Peças com banho de ouro 18k ou de ródio sobre base metálica. [CONFIRMAR]
+- Garantia de 6 meses contra defeitos no banho (descascar ou escurecer com uso normal). [CONFIRMAR]
+- Cuidados: tirar a peça para tomar banho, nadar, dormir e fazer exercícios; evitar contato com perfume, cremes e produtos de limpeza; guardar separada, em saquinho; limpar só com flanela seca e macia.
+- Anéis: o tamanho é o número do aro. Para medir, passe um barbante em volta do dedo, marque e meça em milímetros; compare com a tabela na página do produto. [CONFIRMAR]
+- Colares e pulseiras: o comprimento em centímetros está na página do produto. [CONFIRMAR]
+- Por higiene, brincos só são trocados em caso de defeito. [CONFIRMAR]
+- Reação alérgica ou irritação na pele: a equipe assume o atendimento.
 
 ## Pagamento
 - Pix com 5% de desconto, cartão de crédito em até 3x sem juros (parcela mínima de R$ 50) ou boleto. [CONFIRMAR]
@@ -42,10 +51,10 @@ Tamanhos disponíveis: P, M, G e GG.
 - Pedidos de devolução e de reembolso são sempre conduzidos pela equipe.
 
 ## Produto com defeito
-- Peças com defeito são trocadas ou reembolsadas sem custo para a cliente.
+- Roupas e semijoias com defeito são trocadas ou reembolsadas sem custo para a cliente.
 - A cliente deve enviar fotos do defeito e o número do pedido. A equipe assume o atendimento.
 
-## Cuidados com as peças
+## Cuidados com as roupas
 - Seguir sempre a etiqueta. Em geral: lavar do avesso, em água fria, sem alvejante e secar à sombra.
 
 ## Cupons e promoções
